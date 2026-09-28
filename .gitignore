@@ -1,0 +1,11 @@
+# Local launchers and Python artifacts
+*.lnk
+__pycache__/
+*.py[cod]
+.venv/
+
+# Local settings and connection exports
+.env
+.env.*
+connections*.json
+*.backup.json

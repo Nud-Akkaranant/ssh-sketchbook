@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ssh-sketchbook</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"><img src="icon.svg" alt=""></div>
+        <div><span class="brand-name">ssh<span class="brand-dot">-</span>sketchbook</span><span class="brand-caption">your little corner of the network</span></div>
+      </div>
+      <div class="sidebar-caption">YOUR WORKSPACE</div>
+      <nav aria-label="Main navigation">
+        <button class="nav-link active" data-view="home" type="button"><span class="nav-icon" aria-hidden="true">⌂</span> My machines <span class="nav-arrow">↗</span></button>
+        <button class="nav-link" data-view="settings" type="button"><span class="nav-icon" aria-hidden="true">✎</span> Configure <span class="nav-arrow">↗</span></button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="sidebar-doodle" aria-hidden="true"><svg viewBox="0 0 200 105" fill="none"><path d="M8 83c28-15 44-14 61-7 27 12 45 12 70-5 17-11 33-12 52-8" stroke="#465b63" stroke-width="2" stroke-linecap="round" stroke-dasharray="5 7"/><path d="m163 60 29 2-13 23" stroke="#465b63" stroke-width="2" stroke-linejoin="round"/><rect x="29" y="21" width="49" height="35" rx="4" stroke="#334951" stroke-width="2" transform="rotate(-8 29 21)"/><path d="m39 30 7 6-6 7m14 0h11" stroke="#334951" stroke-width="2" stroke-linecap="round"/><path d="m128 12 3 10 10 3-10 3-3 10-3-10-10-3 10-3 3-10Z" fill="#f3b765" stroke="#334951" stroke-width="1.5"/></svg></div>
+        <p>Every machine has<br>a story to tell.</p>
+        <span>Made for your own network ↗</span>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar"><span class="breadcrumb">WORKSPACE <span>/</span> <strong id="breadcrumb-page">MY MACHINES</strong></span><span class="topbar-right"><span class="topbar-sparkle" aria-hidden="true">✳</span> A home for your hosts</span></header>
+      <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+      <section id="home-view" class="view" aria-labelledby="home-title">
+        <div class="page-heading">
+          <div><span class="eyebrow"><span class="eyebrow-line"></span> YOUR CONNECTIONS, ALL IN ONE PLACE</span><h1 id="home-title">Hello, <em>explorer.</em> <span class="heading-star" aria-hidden="true">✳</span></h1><p class="page-subtitle">Your machines are just a click away. Pick one and hop in.</p></div>
+          <button type="button" class="button button-dark" id="add-home"><span aria-hidden="true">＋</span> Add a machine</button>
+        </div>
+        <div class="section-toolbar"><div><h2>Your machines <span id="machine-count" class="count-bubble">0</span></h2><p>Each connection opens in a tab of the same Windows Terminal window.</p></div><div class="toolbar-actions"><button type="button" id="refresh-button" class="button button-outline"><span class="refresh-icon" aria-hidden="true">↻</span> Refresh status</button><button type="button" id="open-all-button" class="button button-dark" disabled><span aria-hidden="true">↗</span> Open all machines</button></div></div>
+        <div id="home-empty" class="empty-state" hidden><div class="empty-illustration" aria-hidden="true"><svg viewBox="0 0 170 135" fill="none"><path d="M20 107c28-11 93-10 128 1" stroke="#45545a" stroke-width="2" stroke-dasharray="4 6"/><rect x="36" y="20" width="96" height="69" rx="7" fill="#fbf7ee" stroke="#30454d" stroke-width="3" transform="rotate(-4 36 20)"/><path d="m55 47 12 11-12 11m26 0h26" stroke="#30454d" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="m119 5 3 9 9 3-9 3-3 9-3-9-9-3 9-3 3-9Z" fill="#f2ba6d" stroke="#30454d" stroke-width="2"/><path d="M65 95v11m45-11v11" stroke="#30454d" stroke-width="3" stroke-linecap="round"/></svg></div><h3>Nothing on the map yet.</h3><p>Add your first machine and it'll show up right here.</p><button type="button" class="button button-dark" id="add-empty">＋ Add your first machine</button></div>
+        <div id="machine-grid" class="machine-grid" aria-live="polite"></div>
+        <div class="hint-note"><span aria-hidden="true">✳</span><p><strong>A little heads-up.</strong> Ping and SSH port checks are separate. Some machines block ping but still welcome SSH connections.</p></div>
+      </section>
+
+      <section id="settings-view" class="view" aria-labelledby="settings-title" hidden>
+        <div class="page-heading"><div><span class="eyebrow"><span class="eyebrow-line"></span> MAKE THIS SPACE YOURS</span><h1 id="settings-title">The <em>details.</em> <span class="heading-star" aria-hidden="true">✳</span></h1><p class="page-subtitle">Keep your connection details tidy and easy to find.</p></div></div>
+        <div class="settings-layout">
+          <div class="form-paper"><div class="form-heading"><div><span class="step-label">01 / CONNECTION DETAILS</span><h2 id="form-title">Add a machine</h2><p>Fill in the essentials. You can always change them later.</p></div><span class="paper-icon" aria-hidden="true">✎</span></div>
+            <form id="connection-form" novalidate>
+              <div class="form-grid"><label class="field">Name <span class="required">*</span><span class="field-hint">A name you'll recognize</span><input id="name" name="name" maxlength="80" placeholder="e.g. Living room server" required></label><label class="field">Username <span class="required">*</span><span class="field-hint">Your SSH account</span><input id="username" name="username" maxlength="64" placeholder="e.g. operator" required></label></div>
+              <label class="field">Description <span class="optional">optional</span><span class="field-hint">What lives on this machine?</span><textarea id="description" name="description" maxlength="500" rows="3" placeholder="A little note for future you..."></textarea></label>
+              <div class="form-grid host-row"><label class="field">IP address or hostname <span class="required">*</span><span class="field-hint">Where to find it</span><input id="host" name="host" maxlength="253" placeholder="192.0.2.10" required></label><label class="field">SSH port <span class="required">*</span><span class="field-hint">Usually 22</span><input id="port" name="port" type="number" min="1" max="65535" value="22" required></label></div>
+              <details class="advanced"><summary>More connection options <span aria-hidden="true">⌄</span></summary><div class="advanced-fields"><label class="field">Private key path <span class="optional">optional</span><span class="field-hint">Leave empty to use SSH defaults or a password prompt</span><input id="key_path" name="key_path" maxlength="1024" placeholder="C:\Users\you\.ssh\id_ed25519"></label><div class="form-grid"><label class="field">Jump host <span class="optional">optional</span><span class="field-hint">For example user@gateway:22</span><input id="jump_host" name="jump_host" maxlength="320" placeholder="user@gateway:22"></label><label class="field">Timeout in seconds<span class="field-hint">1 to 60 seconds</span><input id="timeout" name="timeout" type="number" min="1" max="60" value="10"></label></div></div></details>
+              <p id="form-error" class="form-error" role="alert" hidden></p><div class="form-actions"><button type="submit" class="button button-dark" id="save-button">＋ Save machine</button><button type="button" id="cancel-edit" class="button button-text" hidden>Cancel editing</button></div>
+            </form>
+          </div>
+          <div class="saved-panel"><div class="saved-heading"><span class="step-label">02 / YOUR LIST</span><h2>Saved machines <span id="saved-count" class="count-bubble">0</span></h2><p>Tap one to edit its details.</p></div><div id="saved-list" class="saved-list"></div><div class="privacy-note"><span aria-hidden="true">♡</span><p><strong>Your passwords stay yours.</strong><br>We never save them. SSH will ask when you connect.</p></div></div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
