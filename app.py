@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
 
-APP_DIR = Path(__file__).resolve().parent
+APP_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 DATA_PATH = Path(os.environ.get("APPDATA", Path.home())) / "SSH Sketchbook" / "connections.json"
 HOST_RE = re.compile(r"^(?=.{1,253}$)[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$")
 USER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]{0,63}$")

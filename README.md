@@ -2,15 +2,21 @@
 
 A small Windows desktop app for keeping SSH connections in one place. The interface has a hand-drawn, notebook-style theme. Connections open as tabs in one shared Windows Terminal window.
 
-## Set up
+## Install on Windows
 
-1. Install Python 3, the Windows OpenSSH Client, and Windows Terminal. Check with `py -3 --version`, `ssh -V`, and `where wt` in a terminal.
-2. In this folder, run `py -3 -m pip install -r requirements.txt`. The desktop window uses pywebview and the Windows WebView2 runtime.
-3. Double-click **Open SSH Sketchbook.vbs** to open the app without a terminal window. If it does not launch, run **Launch SSH Sketchbook.cmd** instead to see the error. You can also start it with `py -3 app.py`.
+Open the [Build Windows installer workflow](https://github.com/Nud-Akkaranant/ssh-sketchbook/actions/workflows/build-windows.yml), select the latest successful run on `main`, and download the `ssh-sketchbook-installer-*` artifact. Unzip it and run `ssh-sketchbook-setup.exe`. The installer puts the app in your user profile, adds a Start menu shortcut, and offers a desktop shortcut. Python is not required on the installed computer. Artifacts are retained for 30 days; each push to `main` creates a fresh installer.
 
-### Pin to the Windows taskbar
+Windows Terminal (`wt.exe`), the Windows OpenSSH Client (`ssh.exe`), and Microsoft Edge WebView2 Runtime must be installed on that computer. The installer does not bundle these system components. This installer is not code-signed, so Windows may show an unknown publisher warning; verify the download came from this repository before running it. Upgrades and uninstalls do not remove saved connections in `%APPDATA%`.
 
-Double-click **Create taskbar shortcut.vbs**. It creates `ssh-sketchbook.lnk` in this folder with the app logo and the right Python launch command. Right-click `ssh-sketchbook.lnk` and select **Pin to taskbar**. On Windows 11, you may need **Show more options** first. Keep this project folder in place after pinning it; the shortcut points to `app.py` and `static/icon.ico` here. If Windows does not offer Pin to taskbar, launch the `.lnk`, right-click the running app icon on the taskbar, and choose **Pin to taskbar** there.
+### Run from source instead
+
+1. Install Python 3 and run `py -3 -m pip install -r requirements.txt` in this folder.
+2. Double-click **Open SSH Sketchbook.vbs** to open the app without a terminal window. If it does not launch, run **Launch SSH Sketchbook.cmd** to see the error. You can also start it with `py -3 app.py`.
+3. For a local installer build, install Inno Setup 6 and run `py -3 -m pip install -r requirements-build.txt`, then `pwsh -File scripts/build.ps1`. The installer appears in `dist/installer/`.
+
+### Pin a source checkout to the Windows taskbar
+
+For the installed app, pin the **ssh-sketchbook** Start menu entry instead. For a source checkout, double-click **Create taskbar shortcut.vbs**. It creates `ssh-sketchbook.lnk` in this folder with the app logo and the right Python launch command. Right-click `ssh-sketchbook.lnk` and select **Pin to taskbar**. On Windows 11, you may need **Show more options** first. Keep this project folder in place after pinning it; the shortcut points to `app.py` and `static/icon.ico` here. If Windows does not offer Pin to taskbar, launch the `.lnk`, right-click the running app icon on the taskbar, and choose **Pin to taskbar** there.
 
 ## Use it
 

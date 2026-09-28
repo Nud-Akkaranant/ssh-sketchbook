@@ -3,6 +3,9 @@
 __pycache__/
 *.py[cod]
 .venv/
+build/
+dist/
+ssh-sketchbook.spec
 
 # Local settings and connection exports
 .env
