@@ -187,18 +187,20 @@ function selectSession(id) {
 async function copyTerminalSelection(terminal) {
   const text = terminal.getSelection();
   try {
-    await navigator.clipboard.writeText(text);
-  } catch (_) {
-    const copyField = element('textarea');
-    copyField.value = text;
-    copyField.style.position = 'fixed';
-    copyField.style.opacity = '0';
-    document.body.append(copyField);
-    copyField.select();
-    const copied = document.execCommand('copy');
-    copyField.remove();
+    await call('clipboard_set', text);
+  } catch (error) {
+    notice(error.message || 'Could not copy terminal text to the clipboard.', true);
+  } finally {
     terminal.focus();
-    if (!copied) notice('Could not copy terminal text to the clipboard.', true);
+  }
+}
+
+async function pasteTerminalClipboard(terminal) {
+  try {
+    const text = await call('clipboard_get');
+    if (text) terminal.paste(text);
+  } catch (error) {
+    notice(error.message || 'Could not read text from the clipboard.', true);
   }
 }
 
@@ -228,9 +230,7 @@ async function openSession(entryId) {
           return false;
         }
         if (key === 'v') {
-          navigator.clipboard.readText().then(text => {
-            if (text) terminal.paste(text);
-          }).catch(() => notice('Could not read text from the clipboard.', true));
+          pasteTerminalClipboard(terminal);
           return false;
         }
         return true;
