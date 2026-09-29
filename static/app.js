@@ -1,4 +1,4 @@
-const state = { entries: [], statuses: new Map(), editingId: null, openingAll: false, sessions: new Map(), activeSessionId: null, openingSession: false };
+const state = { entries: [], statuses: new Map(), editingId: null, openingAll: false, sessions: new Map(), activeSessionId: null, openingSession: false, connectingSessionId: null };
 let sessionPollTimer;
 let sessionPollBusy = false;
 let resizeTimer;
@@ -112,10 +112,16 @@ function renderTerminalChoices() {
   $('#terminal-connect-button').disabled = !state.entries.length || state.openingSession;
 }
 
+function showTerminalProgress(message) {
+  const progress = $('#terminal-progress');
+  progress.textContent = message;
+  progress.hidden = !message;
+}
+
 function renderTerminalTabs() {
   const tabs = $('#terminal-tabs');
   tabs.replaceChildren();
-  $('#terminal-empty').hidden = state.sessions.size !== 0;
+  $('#terminal-empty').hidden = state.sessions.size !== 0 || state.openingSession;
   $('#terminal-workspace').hidden = state.sessions.size === 0;
   for (const session of state.sessions.values()) {
     const wrapper = element('div', `terminal-tab ${session.id === state.activeSessionId ? 'selected' : ''}`);
@@ -198,10 +204,16 @@ async function copyTerminalSelection(terminal) {
 async function openSession(entryId) {
   if (state.openingSession) return;
   state.openingSession = true;
+  state.connectingSessionId = null;
+  showTerminalProgress('Starting terminal…');
   renderTerminalChoices();
+  renderTerminalTabs();
   showView('terminal');
+  let opened;
   try {
-    const opened = await call('start_session', entryId, 80, 24);
+    opened = await call('start_session', entryId, 80, 24);
+    state.connectingSessionId = opened.id;
+    showTerminalProgress('Waiting for SSH response…');
     let session;
     try {
       const terminal = new Terminal({ cursorBlink: true, fontFamily: 'Cascadia Mono, Consolas, monospace', fontSize: 14, scrollback: 2000, theme: { background: '#11191b', foreground: '#e8eee6', cursor: '#efb56d', selectionBackground: '#587d7688' } });
@@ -242,7 +254,12 @@ async function openSession(entryId) {
     }
   } finally {
     state.openingSession = false;
+    if (!opened || !state.sessions.has(opened.id)) {
+      state.connectingSessionId = null;
+      showTerminalProgress('');
+    }
     renderTerminalChoices();
+    renderTerminalTabs();
   }
 }
 
@@ -265,6 +282,11 @@ async function pollSessions() {
         if (!state.sessions.has(session.id)) return;
         if (result.truncated) writeTerminalOutput(session, '\r\n[Earlier terminal output was discarded because the session produced too much data.]\r\n');
         if (result.output) writeTerminalOutput(session, result.output);
+        if (session.id === state.connectingSessionId &&
+            (result.output?.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '').trim() || !result.running || result.error)) {
+          state.connectingSessionId = null;
+          showTerminalProgress('');
+        }
         if (result.error) writeTerminalOutput(session, `\r\n[Terminal I/O error: ${result.error}]\r\n`);
         if (!result.running) {
           session.running = false;
@@ -273,6 +295,10 @@ async function pollSessions() {
         }
       } catch (error) {
         if (!session.closing) {
+          if (session.id === state.connectingSessionId) {
+            state.connectingSessionId = null;
+            showTerminalProgress('');
+          }
           session.running = false;
           writeTerminalOutput(session, `\r\n[Unable to read session: ${error.message}]\r\n`);
           renderTerminalTabs();
@@ -292,6 +318,10 @@ async function closeSession(id) {
   session.closing = true;
   try { await call('close_session', id); }
   catch (error) { session.closing = false; notice(error.message, true); return; }
+  if (state.connectingSessionId === id) {
+    state.connectingSessionId = null;
+    showTerminalProgress('');
+  }
   session.terminal.dispose();
   session.panel.remove();
   state.sessions.delete(id);

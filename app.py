@@ -183,6 +183,15 @@ class ConnectionStore:
                 os.unlink(temporary)
 
 
+def embedded_ssh_executable():
+    # PATH may select an older SSH client than Windows Terminal uses.
+    if sys.platform == "win32":
+        native = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "OpenSSH" / "ssh.exe"
+        if native.is_file():
+            return str(native)
+    return shutil.which("ssh")
+
+
 def ssh_args(entry):
     args = ["ssh", "-p", str(entry["port"]), "-o", f"ConnectTimeout={entry['timeout']}"]
     if entry["key_path"]:
@@ -258,7 +267,7 @@ class TerminalSession:
         self.watcher.start()
 
     def _watch(self):
-        # ConPTY can leave read() blocked after the child exits. Allow its
+        # A PTY can leave read() blocked after the child exits. Allow its
         # remaining output to drain, then close the PTY to release the reader.
         while not self.stop_watcher.wait(0.1):
             with self.lock:
@@ -396,7 +405,8 @@ class SessionManager:
         clean = validate_entry(entry)
         if clean["key_path"] and not Path(clean["key_path"]).is_file():
             raise ValueError("Private key file not found. Update its path in Configure.")
-        if not shutil.which("ssh"):
+        ssh_exe = embedded_ssh_executable()
+        if not ssh_exe:
             raise ValueError("OpenSSH is not installed or ssh.exe is not on PATH.")
         try:
             from winpty import Backend, PtyProcess
@@ -405,7 +415,7 @@ class SessionManager:
         with self.lock:
             if len(self.sessions) >= self.MAX_SESSIONS:
                 raise ValueError("Too many terminal sessions. Close a session first.")
-            process = PtyProcess.spawn(ssh_args(clean), dimensions=(rows, cols), backend=Backend.ConPTY)
+            process = PtyProcess.spawn([ssh_exe, *ssh_args(clean)[1:]], dimensions=(rows, cols), backend=Backend.WinPTY)
             try:
                 session = TerminalSession(process, clean["name"])
             except Exception:

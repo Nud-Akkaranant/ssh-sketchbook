@@ -7,11 +7,16 @@ $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 Set-Location (Split-Path -Parent $PSScriptRoot)
 
+$winptyAgent = python -c "from pathlib import Path; import winpty; print(Path(winpty.__file__).parent / 'winpty-agent.exe')"
+if (-not (Test-Path $winptyAgent)) {
+    throw 'The installed pywinpty package is missing winpty-agent.exe.'
+}
 python -m PyInstaller --noconfirm --clean --onedir --windowed `
-    --name ssh-sketchbook --icon static/icon.ico --add-data 'static;static' app.py
+    --name ssh-sketchbook --icon static/icon.ico --add-data 'static;static' `
+    --add-binary "${winptyAgent};winpty" app.py
 
 $bundle = 'dist/ssh-sketchbook/_internal'
-foreach ($asset in @('static/vendor/xterm.js', 'static/vendor/xterm.css', 'static/vendor/addon-fit.js', 'winpty/winpty.dll')) {
+foreach ($asset in @('static/vendor/xterm.js', 'static/vendor/xterm.css', 'static/vendor/addon-fit.js', 'winpty/winpty.dll', 'winpty/winpty-agent.exe')) {
     if (-not (Test-Path (Join-Path $bundle $asset))) {
         throw "The bundled app is missing $asset."
     }

@@ -19,6 +19,14 @@ EXAMPLE = {
 
 
 class ValidationTests(unittest.TestCase):
+    def test_embedded_ssh_prefers_windows_client_and_falls_back_to_path(self):
+        with patch("app.sys.platform", "win32"), patch.dict("app.os.environ", {"SystemRoot": "C:/TestWindows"}):
+            with patch("app.Path.is_file", return_value=True), patch("app.shutil.which") as which:
+                self.assertEqual(app.embedded_ssh_executable(), str(Path("C:/TestWindows/System32/OpenSSH/ssh.exe")))
+                which.assert_not_called()
+            with patch("app.Path.is_file", return_value=False), patch("app.shutil.which", return_value="fallback-ssh"):
+                self.assertEqual(app.embedded_ssh_executable(), "fallback-ssh")
+
     def test_valid_entry(self):
         self.assertEqual(app.validate_entry(EXAMPLE)["port"], 49152)
         self.assertTrue(app.valid_host("2001:db8::1"))
@@ -207,13 +215,13 @@ class TerminalSessionTests(unittest.TestCase):
             return pty
 
         fake_winpty = types.SimpleNamespace(
-            Backend=types.SimpleNamespace(ConPTY=0),
+            Backend=types.SimpleNamespace(WinPTY=1),
             PtyProcess=types.SimpleNamespace(spawn=spawn),
         )
         patcher = patch.dict(sys.modules, {"winpty": fake_winpty})
         patcher.start()
         self.addCleanup(patcher.stop)
-        ssh_patcher = patch("app.shutil.which", return_value="C:/Windows/System32/OpenSSH/ssh.exe")
+        ssh_patcher = patch("app.embedded_ssh_executable", return_value="C:/Windows/System32/OpenSSH/ssh.exe")
         ssh_patcher.start()
         self.addCleanup(ssh_patcher.stop)
 
@@ -226,7 +234,8 @@ class TerminalSessionTests(unittest.TestCase):
         session_id = self.start()
         pty = self.ptys[0]
         self.assertEqual(self.spawns[0], (
-            app.ssh_args(self.entry), {"dimensions": (30, 100), "backend": 0},
+            ["C:/Windows/System32/OpenSSH/ssh.exe", *app.ssh_args(self.entry)[1:]],
+            {"dimensions": (30, 100), "backend": 1},
         ))
         self.assertTrue(pty.read_started.wait(1))
         self.assertEqual(self.api.read_session(session_id)["data"]["running"], True)
@@ -290,7 +299,7 @@ class TerminalSessionTests(unittest.TestCase):
             result = self.api.start_session(self.entry["id"], 80, 24)
         self.assertFalse(result["ok"])
         self.assertIn("pywinpty", result["error"])
-        with patch("app.shutil.which", return_value=None):
+        with patch("app.embedded_ssh_executable", return_value=None):
             self.assertIn("OpenSSH", self.api.start_session(self.entry["id"], 80, 24)["error"])
         session_id = self.start()
         for data in [None, "", "a\0b", "x" * 65537]:
@@ -317,7 +326,7 @@ class TerminalSessionTests(unittest.TestCase):
 
     def test_spawn_and_reader_failures_are_reported(self):
         with patch.dict(sys.modules, {"winpty": types.SimpleNamespace(
-                Backend=types.SimpleNamespace(ConPTY=0),
+                Backend=types.SimpleNamespace(WinPTY=1),
                 PtyProcess=types.SimpleNamespace(spawn=lambda *a, **kw: (_ for _ in ()).throw(OSError("spawn failed"))),
         )}):
             result = self.api.start_session(self.entry["id"], 80, 24)
