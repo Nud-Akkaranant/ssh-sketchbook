@@ -143,6 +143,7 @@ function fitActiveTerminal() {
   const session = state.sessions.get(state.activeSessionId);
   if (!session || session.panel.hidden) return;
   session.fit.fit();
+  session.terminal.scrollToBottom();
   const { cols, rows } = session.terminal;
   if (session.cols === cols && session.rows === rows) return;
   session.cols = cols;
@@ -204,6 +205,7 @@ async function openSession(entryId) {
       session = { id: opened.id, name: opened.name, terminal, fit, panel, running: true, cols: 80, rows: 24, pendingWrite: Promise.resolve() };
       terminal.onData(data => {
         if (!session.running) return;
+        terminal.scrollToBottom();
         session.pendingWrite = session.pendingWrite.then(() => call('write_session', session.id, data)).catch(error => {
           if (session.running) notice(error.message, true);
         });
@@ -222,6 +224,14 @@ async function openSession(entryId) {
   }
 }
 
+function writeTerminalOutput(session, text) {
+  const buffer = session.terminal.buffer.active;
+  const followOutput = session.id === state.activeSessionId && buffer.viewportY >= buffer.baseY - 1;
+  session.terminal.write(text, () => {
+    if (followOutput && session.id === state.activeSessionId) session.terminal.scrollToBottom();
+  });
+}
+
 async function pollSessions() {
   if (sessionPollBusy || !state.sessions.size) return;
   sessionPollBusy = true;
@@ -231,18 +241,18 @@ async function pollSessions() {
       try {
         const result = await call('read_session', session.id);
         if (!state.sessions.has(session.id)) return;
-        if (result.truncated) session.terminal.write('\r\n[Earlier terminal output was discarded because the session produced too much data.]\r\n');
-        if (result.output) session.terminal.write(result.output);
-        if (result.error) session.terminal.write(`\r\n[Terminal I/O error: ${result.error}]\r\n`);
+        if (result.truncated) writeTerminalOutput(session, '\r\n[Earlier terminal output was discarded because the session produced too much data.]\r\n');
+        if (result.output) writeTerminalOutput(session, result.output);
+        if (result.error) writeTerminalOutput(session, `\r\n[Terminal I/O error: ${result.error}]\r\n`);
         if (!result.running) {
           session.running = false;
-          session.terminal.write(`\r\n[SSH session ended${result.exit_code === null || result.exit_code === undefined ? '' : ` with code ${result.exit_code}`}. Close this tab when ready.]\r\n`);
+          writeTerminalOutput(session, `\r\n[SSH session ended${result.exit_code === null || result.exit_code === undefined ? '' : ` with code ${result.exit_code}`}. Close this tab when ready.]\r\n`);
           renderTerminalTabs();
         }
       } catch (error) {
         if (!session.closing) {
           session.running = false;
-          session.terminal.write(`\r\n[Unable to read session: ${error.message}]\r\n`);
+          writeTerminalOutput(session, `\r\n[Unable to read session: ${error.message}]\r\n`);
           renderTerminalTabs();
         }
       }
@@ -417,6 +427,7 @@ workspaceResizeObserver = new ResizeObserver(() => {
   resizeTimer = setTimeout(fitActiveTerminal, 80);
 });
 workspaceResizeObserver.observe($('#terminal-workspace'));
+workspaceResizeObserver.observe($('#terminal-panels'));
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(fitActiveTerminal, 100);
