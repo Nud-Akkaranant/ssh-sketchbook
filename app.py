@@ -72,40 +72,6 @@ def write_clipboard(text):
             user32.CloseClipboard()
 
 
-def read_clipboard():
-    if sys.platform != "win32":
-        raise ValueError("The native clipboard is only available on Windows.")
-    import ctypes
-    from ctypes import wintypes
-
-    user32 = ctypes.windll.user32
-    kernel32 = ctypes.windll.kernel32
-    user32.OpenClipboard.argtypes = [wintypes.HWND]
-    user32.OpenClipboard.restype = wintypes.BOOL
-    user32.CloseClipboard.restype = wintypes.BOOL
-    user32.GetClipboardData.argtypes = [wintypes.UINT]
-    user32.GetClipboardData.restype = ctypes.c_void_p
-    kernel32.GlobalLock.argtypes = [ctypes.c_void_p]
-    kernel32.GlobalLock.restype = ctypes.c_void_p
-    kernel32.GlobalUnlock.argtypes = [ctypes.c_void_p]
-    with CLIPBOARD_LOCK:
-        if not user32.OpenClipboard(None):
-            raise OSError("Could not open the Windows clipboard.")
-        try:
-            handle = user32.GetClipboardData(13)
-            if not handle:
-                return ""
-            address = kernel32.GlobalLock(handle)
-            if not address:
-                raise OSError("Could not lock clipboard memory.")
-            try:
-                return ctypes.wstring_at(address)
-            finally:
-                kernel32.GlobalUnlock(handle)
-        finally:
-            user32.CloseClipboard()
-
-
 def valid_host(value):
     if not isinstance(value, str) or not value or len(value) > 253:
         return False
@@ -542,9 +508,6 @@ class Api:
 
     def clipboard_set(self, text):
         return self._result(lambda: write_clipboard(text))
-
-    def clipboard_get(self):
-        return self._result(read_clipboard)
 
     def shutdown(self):
         self.sessions.shutdown()

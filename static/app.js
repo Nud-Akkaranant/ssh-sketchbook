@@ -195,15 +195,6 @@ async function copyTerminalSelection(terminal) {
   }
 }
 
-async function pasteTerminalClipboard(terminal) {
-  try {
-    const text = await call('clipboard_get');
-    if (text) terminal.paste(text);
-  } catch (error) {
-    notice(error.message || 'Could not read text from the clipboard.', true);
-  }
-}
-
 async function openSession(entryId) {
   if (state.openingSession) return;
   state.openingSession = true;
@@ -229,10 +220,8 @@ async function openSession(entryId) {
           copyTerminalSelection(terminal).catch(() => notice('Could not copy terminal text to the clipboard.', true));
           return false;
         }
-        if (key === 'v') {
-          pasteTerminalClipboard(terminal);
-          return false;
-        }
+        // Let WebView2's native paste event deliver the text once to xterm.
+        if (key === 'v') return false;
         return true;
       });
       session = { id: opened.id, name: opened.name, terminal, fit, panel, running: true, cols: 80, rows: 24, pendingWrite: Promise.resolve() };
