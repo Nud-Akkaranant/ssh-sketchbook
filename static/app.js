@@ -184,6 +184,24 @@ function selectSession(id) {
   });
 }
 
+async function copyTerminalSelection(terminal) {
+  const text = terminal.getSelection();
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (_) {
+    const copyField = element('textarea');
+    copyField.value = text;
+    copyField.style.position = 'fixed';
+    copyField.style.opacity = '0';
+    document.body.append(copyField);
+    copyField.select();
+    const copied = document.execCommand('copy');
+    copyField.remove();
+    terminal.focus();
+    if (!copied) notice('Could not copy terminal text to the clipboard.', true);
+  }
+}
+
 async function openSession(entryId) {
   if (state.openingSession) return;
   state.openingSession = true;
@@ -202,6 +220,21 @@ async function openSession(entryId) {
       panel.hidden = true;
       $('#terminal-panels').append(panel);
       terminal.open(panel);
+      terminal.attachCustomKeyEventHandler(event => {
+        if (event.type !== 'keydown' || !(event.ctrlKey || event.metaKey)) return true;
+        const key = event.key.toLowerCase();
+        if (key === 'c' && terminal.hasSelection()) {
+          copyTerminalSelection(terminal).catch(() => notice('Could not copy terminal text to the clipboard.', true));
+          return false;
+        }
+        if (key === 'v') {
+          navigator.clipboard.readText().then(text => {
+            if (text) terminal.paste(text);
+          }).catch(() => notice('Could not read text from the clipboard.', true));
+          return false;
+        }
+        return true;
+      });
       session = { id: opened.id, name: opened.name, terminal, fit, panel, running: true, cols: 80, rows: 24, pendingWrite: Promise.resolve() };
       terminal.onData(data => {
         if (!session.running) return;
