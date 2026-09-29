@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
@@ -182,9 +183,217 @@ def probe(entry):
     return {"id": entry["id"], "ping": ping, "ssh_port": ssh_port}
 
 
+class TerminalSession:
+    """Collect PTY output on a daemon thread so bridge polls never block."""
+
+    OUTPUT_LIMIT = 1024 * 1024
+
+    def __init__(self, process, name):
+        self.id = str(uuid4())
+        self.name = name
+        self.process = process
+        self.lock = threading.Lock()
+        self.io_lock = threading.Lock()
+        self.output = deque()
+        self.output_size = 0
+        self.truncated = False
+        self.running = True
+        self.closed = False
+        self.exit_code = None
+        self.error = None
+        self.stop_watcher = threading.Event()
+        self.reader = threading.Thread(target=self._read, daemon=True, name=f"ssh-session-{self.id}")
+        self.watcher = threading.Thread(target=self._watch, daemon=True, name=f"ssh-exit-{self.id}")
+        self.reader.start()
+        self.watcher.start()
+
+    def _watch(self):
+        # ConPTY can leave read() blocked after the child exits. Allow its
+        # remaining output to drain, then close the PTY to release the reader.
+        while not self.stop_watcher.wait(0.1):
+            with self.lock:
+                if not self.running:
+                    return
+            try:
+                alive = self.process.isalive()
+            except (OSError, ValueError):
+                alive = False
+            if alive:
+                continue
+            try:
+                exit_code = self.process.exitstatus
+            except (OSError, ValueError):
+                exit_code = None
+            with self.lock:
+                self.exit_code = exit_code
+            self.reader.join(timeout=0.25)
+            if self.reader.is_alive():
+                with self.io_lock:
+                    with self.lock:
+                        if not self.closed:
+                            self.closed = True
+                            should_close = True
+                        else:
+                            should_close = False
+                    if should_close:
+                        try:
+                            self.process.close(force=True)
+                        except OSError:
+                            pass
+                self.reader.join(timeout=1)
+            with self.lock:
+                if self.exit_code is None:
+                    self.exit_code = exit_code
+                if self.reader.is_alive():
+                    self.error = "Terminal output could not be fully drained."
+                self.running = False
+            return
+
+    def _read(self):
+        try:
+            while True:
+                chunk = self.process.read(4096)
+                if not chunk:
+                    continue
+                with self.lock:
+                    self.output.append(chunk)
+                    self.output_size += len(chunk)
+                    while self.output_size > self.OUTPUT_LIMIT:
+                        removed = self.output.popleft()
+                        excess = self.output_size - self.OUTPUT_LIMIT
+                        if len(removed) > excess:
+                            self.output.appendleft(removed[excess:])
+                            self.output_size -= excess
+                        else:
+                            self.output_size -= len(removed)
+                        self.truncated = True
+        except EOFError:
+            pass
+        except (OSError, ValueError) as error:
+            with self.lock:
+                if not self.closed:
+                    self.error = str(error)
+        finally:
+            try:
+                exit_code = self.process.exitstatus
+            except (OSError, ValueError):
+                exit_code = None
+            with self.lock:
+                if self.exit_code is None:
+                    self.exit_code = exit_code
+                self.running = False
+
+    def poll(self):
+        with self.lock:
+            result = {
+                "output": "".join(self.output), "running": self.running,
+                "truncated": self.truncated, "exit_code": self.exit_code,
+            }
+            if self.error is not None:
+                result["error"] = self.error
+            self.output.clear()
+            self.output_size = 0
+            self.truncated = False
+            return result
+
+    def write(self, data):
+        if not isinstance(data, str) or not 1 <= len(data) <= 65536 or "\0" in data:
+            raise ValueError("Terminal input must be 1 to 65536 characters without NUL.")
+        with self.io_lock:
+            with self.lock:
+                if not self.running or self.closed:
+                    raise ValueError("Session has ended.")
+            self.process.write(data)
+
+    def resize(self, cols, rows):
+        validate_dimensions(cols, rows)
+        with self.io_lock:
+            with self.lock:
+                if not self.running or self.closed:
+                    raise ValueError("Session has ended.")
+            self.process.setwinsize(rows, cols)
+
+    def close(self):
+        self.stop_watcher.set()
+        try:
+            with self.io_lock:
+                with self.lock:
+                    if self.closed:
+                        return
+                    self.closed = True
+                self.process.close(force=True)
+        finally:
+            self.reader.join(timeout=1)
+            if threading.current_thread() is not self.watcher:
+                self.watcher.join(timeout=1)
+
+
+def validate_dimensions(cols, rows):
+    if (isinstance(cols, bool) or not isinstance(cols, int) or not 2 <= cols <= 500
+            or isinstance(rows, bool) or not isinstance(rows, int) or not 1 <= rows <= 200):
+        raise ValueError("Terminal dimensions must be 2-500 columns and 1-200 rows.")
+
+
+class SessionManager:
+    MAX_SESSIONS = 8
+
+    def __init__(self):
+        self.lock = threading.RLock()
+        self.sessions = {}
+
+    def start(self, entry, cols, rows):
+        validate_dimensions(cols, rows)
+        clean = validate_entry(entry)
+        if clean["key_path"] and not Path(clean["key_path"]).is_file():
+            raise ValueError("Private key file not found. Update its path in Configure.")
+        if not shutil.which("ssh"):
+            raise ValueError("OpenSSH is not installed or ssh.exe is not on PATH.")
+        try:
+            from winpty import Backend, PtyProcess
+        except ImportError as error:
+            raise ValueError("In-app terminals require pywinpty 3.0.5. Install it to use SSH sessions.") from error
+        with self.lock:
+            if len(self.sessions) >= self.MAX_SESSIONS:
+                raise ValueError("Too many terminal sessions. Close a session first.")
+            process = PtyProcess.spawn(ssh_args(clean), dimensions=(rows, cols), backend=Backend.ConPTY)
+            try:
+                session = TerminalSession(process, clean["name"])
+            except Exception:
+                process.close(force=True)
+                raise
+            self.sessions[session.id] = session
+            return {"id": session.id, "name": session.name}
+
+    def get(self, session_id):
+        if not isinstance(session_id, str):
+            raise ValueError("Session not found.")
+        with self.lock:
+            session = self.sessions.get(session_id)
+        if session is None:
+            raise ValueError("Session not found.")
+        return session
+
+    def close(self, session_id):
+        with self.lock:
+            session = self.get(session_id)
+            del self.sessions[session_id]
+        session.close()
+
+    def shutdown(self):
+        with self.lock:
+            sessions = list(self.sessions.values())
+            self.sessions.clear()
+        for session in sessions:
+            try:
+                session.close()
+            except OSError:
+                pass
+
+
 class Api:
     def __init__(self, store=None):
         self.store = store or ConnectionStore()
+        self.sessions = SessionManager()
 
     def _result(self, action):
         try:
@@ -227,6 +436,29 @@ class Api:
                 return list(pool.map(probe, entries))
         return self._result(refresh)
 
+    def start_session(self, entry_id, cols=80, rows=24):
+        def start():
+            entry = self.store.get(entry_id)
+            if entry is None:
+                raise ValueError("Connection not found.")
+            return self.sessions.start(entry, cols, rows)
+        return self._result(start)
+
+    def read_session(self, session_id):
+        return self._result(lambda: self.sessions.get(session_id).poll())
+
+    def write_session(self, session_id, data):
+        return self._result(lambda: self.sessions.get(session_id).write(data))
+
+    def resize_session(self, session_id, cols, rows):
+        return self._result(lambda: self.sessions.get(session_id).resize(cols, rows))
+
+    def close_session(self, session_id):
+        return self._result(lambda: self.sessions.close(session_id))
+
+    def shutdown(self):
+        self.sessions.shutdown()
+
 
 def main():
     try:
@@ -234,12 +466,16 @@ def main():
     except ImportError:
         print("pywebview is missing. Install it with: py -m pip install -r requirements.txt")
         sys.exit(1)
+    api = Api()
     webview.create_window(
         "ssh-sketchbook", (APP_DIR / "static" / "index.html").as_uri(),
-        js_api=Api(), width=1180, height=780, min_size=(800, 600),
+        js_api=api, width=1180, height=780, min_size=(800, 600),
         background_color="#f7f2e8",
     )
-    webview.start(gui="edgechromium", debug=False, icon=str(APP_DIR / "static" / "icon.ico"))
+    try:
+        webview.start(gui="edgechromium", debug=False, icon=str(APP_DIR / "static" / "icon.ico"))
+    finally:
+        api.shutdown()
 
 
 if __name__ == "__main__":

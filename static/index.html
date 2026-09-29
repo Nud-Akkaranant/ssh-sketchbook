@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ssh-sketchbook</title>
   <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="vendor/xterm.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -17,6 +18,7 @@
       <div class="sidebar-caption">YOUR WORKSPACE</div>
       <nav aria-label="Main navigation">
         <button class="nav-link active" data-view="home" type="button"><span class="nav-icon" aria-hidden="true">⌂</span> My machines <span class="nav-arrow">↗</span></button>
+        <button class="nav-link" data-view="terminal" type="button"><span class="nav-icon" aria-hidden="true">⌘</span> Terminal <span class="nav-arrow">↗</span></button>
         <button class="nav-link" data-view="settings" type="button"><span class="nav-icon" aria-hidden="true">✎</span> Configure <span class="nav-arrow">↗</span></button>
       </nav>
       <div class="sidebar-bottom">
@@ -35,10 +37,23 @@
           <div><span class="eyebrow"><span class="eyebrow-line"></span> YOUR CONNECTIONS, ALL IN ONE PLACE</span><h1 id="home-title">Hello, <em>explorer.</em> <span class="heading-star" aria-hidden="true">✳</span></h1><p class="page-subtitle">Your machines are just a click away. Pick one and hop in.</p></div>
           <button type="button" class="button button-dark" id="add-home"><span aria-hidden="true">＋</span> Add a machine</button>
         </div>
-        <div class="section-toolbar"><div><h2>Your machines <span id="machine-count" class="count-bubble">0</span></h2><p>Each connection opens in a tab of the same Windows Terminal window.</p></div><div class="toolbar-actions"><button type="button" id="refresh-button" class="button button-outline"><span class="refresh-icon" aria-hidden="true">↻</span> Refresh status</button><button type="button" id="open-all-button" class="button button-dark" disabled><span aria-hidden="true">↗</span> Open all machines</button></div></div>
+        <div class="section-toolbar"><div><h2>Your machines <span id="machine-count" class="count-bubble">0</span></h2><p>Connect here in the app, or open tabs in Windows Terminal.</p></div><div class="toolbar-actions"><button type="button" id="refresh-button" class="button button-outline"><span class="refresh-icon" aria-hidden="true">↻</span> Refresh status</button><button type="button" id="open-all-button" class="button button-dark" disabled><span aria-hidden="true">↗</span> Open all machines</button></div></div>
         <div id="home-empty" class="empty-state" hidden><div class="empty-illustration" aria-hidden="true"><svg viewBox="0 0 170 135" fill="none"><path d="M20 107c28-11 93-10 128 1" stroke="#45545a" stroke-width="2" stroke-dasharray="4 6"/><rect x="36" y="20" width="96" height="69" rx="7" fill="#fbf7ee" stroke="#30454d" stroke-width="3" transform="rotate(-4 36 20)"/><path d="m55 47 12 11-12 11m26 0h26" stroke="#30454d" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="m119 5 3 9 9 3-9 3-3 9-3-9-9-3 9-3 3-9Z" fill="#f2ba6d" stroke="#30454d" stroke-width="2"/><path d="M65 95v11m45-11v11" stroke="#30454d" stroke-width="3" stroke-linecap="round"/></svg></div><h3>Nothing on the map yet.</h3><p>Add your first machine and it'll show up right here.</p><button type="button" class="button button-dark" id="add-empty">＋ Add your first machine</button></div>
         <div id="machine-grid" class="machine-grid" aria-live="polite"></div>
         <div class="hint-note"><span aria-hidden="true">✳</span><p><strong>A little heads-up.</strong> Ping and SSH port checks are separate. Some machines block ping but still welcome SSH connections.</p></div>
+      </section>
+
+      <section id="terminal-view" class="view terminal-view" aria-labelledby="terminal-title" hidden>
+        <div class="terminal-heading">
+          <div><span class="eyebrow"><span class="eyebrow-line"></span> YOUR SHELLS, IN ONE PLACE</span><h1 id="terminal-title">The <em>terminal.</em></h1><p class="page-subtitle">Open a saved machine here, then switch between sessions with tabs.</p></div>
+          <div class="terminal-connect"><label for="terminal-machine">Saved machine</label><select id="terminal-machine" aria-label="Saved machine"></select><button type="button" class="button button-dark" id="terminal-connect-button">＋ Connect via app</button></div>
+        </div>
+        <div id="terminal-empty" class="empty-state terminal-empty"><h2>No shells open yet.</h2><p>Choose a saved machine above, or use Connect via app on a machine card.</p></div>
+        <div id="terminal-workspace" class="terminal-workspace" hidden>
+          <div class="terminal-bar"><div id="terminal-tabs" class="terminal-tabs" role="tablist" aria-label="SSH sessions"></div><button type="button" id="terminal-fullscreen" class="terminal-expand" aria-label="Full screen terminal" aria-pressed="false" title="Full screen terminal">⛶ <span>Full screen</span></button></div>
+          <div id="terminal-panels" class="terminal-panels"></div>
+        </div>
+        <p class="terminal-privacy">Drag the terminal's bottom-right corner to resize it. Sessions end when you close the app; passwords are never saved.</p>
       </section>
 
       <section id="settings-view" class="view" aria-labelledby="settings-title" hidden>
@@ -50,7 +65,7 @@
               <label class="field">Description <span class="optional">optional</span><span class="field-hint">What lives on this machine?</span><textarea id="description" name="description" maxlength="500" rows="3" placeholder="A little note for future you..."></textarea></label>
               <div class="form-grid host-row"><label class="field">IP address or hostname <span class="required">*</span><span class="field-hint">Where to find it</span><input id="host" name="host" maxlength="253" placeholder="192.0.2.10" required></label><label class="field">SSH port <span class="required">*</span><span class="field-hint">Usually 22</span><input id="port" name="port" type="number" min="1" max="65535" value="22" required></label></div>
               <details class="advanced"><summary>More connection options <span aria-hidden="true">⌄</span></summary><div class="advanced-fields"><label class="field">Private key path <span class="optional">optional</span><span class="field-hint">Leave empty to use SSH defaults or a password prompt</span><input id="key_path" name="key_path" maxlength="1024" placeholder="C:\Users\you\.ssh\id_ed25519"></label><div class="form-grid"><label class="field">Jump host <span class="optional">optional</span><span class="field-hint">For example user@gateway:22</span><input id="jump_host" name="jump_host" maxlength="320" placeholder="user@gateway:22"></label><label class="field">Timeout in seconds<span class="field-hint">1 to 60 seconds</span><input id="timeout" name="timeout" type="number" min="1" max="60" value="10"></label></div></div></details>
-              <p id="form-error" class="form-error" role="alert" hidden></p><div class="form-actions"><button type="submit" class="button button-dark" id="save-button">＋ Save machine</button><button type="button" id="cancel-edit" class="button button-text" hidden>Cancel editing</button></div>
+              <p id="form-error" class="form-error" role="alert" hidden></p><div class="form-actions"><button type="submit" class="button button-dark" id="save-button">＋ Save machine</button><button type="button" id="cancel-edit" class="button button-text" hidden>Cancel changes</button><button type="button" id="clear-form" class="button button-text">Clear form</button></div>
             </form>
           </div>
           <div class="saved-panel"><div class="saved-heading"><span class="step-label">02 / YOUR LIST</span><h2>Saved machines <span id="saved-count" class="count-bubble">0</span></h2><p>Tap one to edit its details.</p></div><div id="saved-list" class="saved-list"></div><div class="privacy-note"><span aria-hidden="true">♡</span><p><strong>Your passwords stay yours.</strong><br>We never save them. SSH will ask when you connect.</p></div></div>
@@ -58,6 +73,8 @@
       </section>
     </main>
   </div>
+  <script src="vendor/xterm.js"></script>
+  <script src="vendor/addon-fit.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
